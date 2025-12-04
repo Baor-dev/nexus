@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Comment;
-use Illuminate\Http\Request;
-use App\Notifications\NewComment; 
 use App\Models\Post;
+use Illuminate\Http\Request;
+use App\Notifications\NewComment;
+use App\Notifications\NewReply;
 
 class CommentController extends Controller
 {
@@ -17,6 +18,7 @@ class CommentController extends Controller
             'parent_id' => 'nullable|exists:comments,id'
         ]);
 
+        // Tạo bình luận
         $comment = Comment::create([
             'content' => $request->content,
             'user_id' => auth()->id(),
@@ -24,25 +26,35 @@ class CommentController extends Controller
             'parent_id' => $request->parent_id
         ]);
 
-        // --- LOGIC THÔNG BÁO (MỚI) ---
+        // Lấy thông tin bài viết
         $post = Post::find($request->post_id);
-        
-        // Nếu bình luận vào bài viết của người khác -> Thông báo cho tác giả bài viết
-        if ($post->user_id !== auth()->id()) {
-            $post->user->notify(new NewComment(auth()->user(), $post));
+        $currentUser = auth()->user();
+
+        // --- LOGIC THÔNG BÁO ---
+
+        // 1. Thông báo cho chủ bài viết (Nếu người comment không phải là chủ bài)
+        if ($post->user_id !== $currentUser->id) {
+            $post->user->notify(new NewComment($currentUser, $post));
         }
 
-        // (Nâng cao: Nếu trả lời bình luận -> Thông báo cho chủ comment cha)
-        // Phần này bạn có thể tự làm thêm sau.
-        // -----------------------------
+        // 2. Thông báo cho người được trả lời (Nếu là Reply)
+        if ($request->parent_id) {
+            $parentComment = Comment::find($request->parent_id);
+            
+            // Nếu người trả lời KHÁC người viết comment cha (không tự rep mình)
+            // VÀ người viết comment cha KHÁC chủ bài viết (để tránh spam 2 thông báo cùng lúc cho chủ bài)
+            if ($parentComment && $parentComment->user_id !== $currentUser->id && $parentComment->user_id !== $post->user_id) {
+                $parentComment->user->notify(new NewReply($currentUser, $post));
+            }
+            // Nếu chủ bài viết chính là người viết comment cha, họ đã nhận thông báo (1) rồi, không cần gửi (2) nữa.
+        }
 
         return back()->with('success', 'Đã gửi bình luận!');
     }
 
-    // THÊM HÀM XÓA
+    // HÀM XÓA (Giữ nguyên)
     public function destroy(Comment $comment)
     {
-        // Chỉ cho phép xóa nếu là Admin HOẶC là người viết comment đó
         if (auth()->user()->role !== 'admin' && auth()->id() !== $comment->user_id) {
             abort(403, 'Bạn không có quyền xóa bình luận này.');
         }

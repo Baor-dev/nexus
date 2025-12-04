@@ -34,7 +34,7 @@ class BookmarkController extends Controller
         // Lấy các bài viết user đã lưu, kèm theo thông tin cần thiết để hiển thị Card
         $posts = $user->bookmarks()
                       ->with(['user', 'community', 'votes'])
-                      ->withCount('comments')
+                      ->withCount('allComments')
                       ->latest('pivot_created_at') // Sắp xếp theo thời gian lưu gần nhất
                       ->paginate(10);
 

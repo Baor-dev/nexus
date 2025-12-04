@@ -41,6 +41,7 @@
                 </a>
                 <span>•</span>
                 <span>Đăng bởi <a href="{{ route('users.show', $post->user->id) }}" class="hover:underline">u/{{ $post->user->name }}</a></span>
+                {!! $post->user->badge !!}
                 <span>{{ $post->created_at->diffForHumans() }}</span>
 
                 <!-- Bookmark Button -->
@@ -56,6 +57,20 @@
                     </svg>
                     <span class="text-xs font-bold hidden sm:inline">Lưu</span>
                 </button>
+
+                <!-- REPORT BUTTON (MỚI THÊM) -->
+                @auth
+                    @if(Auth::id() !== $post->user_id)
+                        <button onclick="showReportForm('post', {{ $post->id }})" 
+                                class="flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition text-gray-500 hover:text-red-500" 
+                                title="Báo cáo vi phạm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                            <span class="text-xs font-bold hidden sm:inline">Báo cáo</span>
+                        </button>
+                    @endif
+                @endauth
             </div>
 
             <h1 class="text-2xl font-bold text-gray-900 mb-4">{{ $post->title }}</h1>
@@ -80,16 +95,18 @@
                 {!! $post->content !!}
             </div>
 
-            <!-- 2. ẢNH BÌA / THUMBNAIL (Fit khung cố định 500px) -->
-            @if($post->thumbnail)
-                <div class="mb-6 w-full bg-black rounded-lg border border-gray-200 flex justify-center items-center overflow-hidden relative" style="height: 500px;">
-                    <!-- Ảnh nền mờ phía sau tạo hiệu ứng đẹp -->
-                    <div class="absolute inset-0 bg-cover bg-center blur-md opacity-50" style="background-image: url('{{ asset('storage/' . $post->thumbnail) }}')"></div>
-                    
-                    <!-- Ảnh chính nằm gọn trong khung -->
-                    <img src="{{ asset('storage/' . $post->thumbnail) }}" class="relative max-w-full max-h-full object-contain z-10" alt="{{ $post->title }}">
-                </div>
-            @endif
+            <!-- 2. MEDIA DISPLAY (ẢNH/VIDEO) -->
+                @if($post->thumbnail)
+                    <div class="w-full aspect-square bg-gray-100 overflow-hidden flex justify-center items-center relative mt-2">
+                        <div class="absolute inset-0 bg-cover bg-center blur-sm opacity-50" style="background-image: url('{{ asset('storage/' . $post->thumbnail) }}')"></div>
+                        <!-- Chỉ cần thẻ IMG, GIF sẽ tự chạy -->
+                        <img src="{{ asset('storage/' . $post->thumbnail) }}" class="relative w-full h-full object-contain z-10" loading="lazy" alt="{{ $post->title }}">
+                    </div>
+                @else
+                    <div class="px-3 py-4">
+                        <p class="text-sm text-gray-800 line-clamp-6">{{ html_entity_decode($post->description) }}</p>
+                    </div>
+                @endif
 
         </div>
 
@@ -108,13 +125,12 @@
                 <div class="mb-8">
                     <p class="text-sm text-gray-600 mb-2">Bình luận dưới tên <span class="font-bold text-nexus-600">{{ Auth::user()->name }}</span></p>
                     
-                    <!-- FORM BÌNH LUẬN (Đã thêm ID và Validation) -->
+                    <!-- FORM BÌNH LUẬN CHÍNH -->
                     <form id="main-comment-form" action="{{ route('comments.store') }}" method="POST">
                         @csrf
                         <input type="hidden" name="post_id" value="{{ $post->id }}">
                         <textarea id="main-comment-content" name="content" rows="4" class="w-full border border-gray-300 rounded-md p-3 focus:outline-none focus:border-nexus-500 focus:ring-1 focus:ring-nexus-500" placeholder="Bạn nghĩ gì về bài viết này?"></textarea>
                         <div class="mt-2 flex justify-end">
-                            <!-- Đổi type thành button để chặn submit mặc định -->
                             <button type="button" onclick="submitMainComment()" class="bg-nexus-500 text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-nexus-600 transition">Bình Luận</button>
                         </div>
                     </form>
@@ -122,7 +138,7 @@
             @else
                 <div class="bg-white border border-gray-300 p-6 rounded-lg text-center mb-8 shadow-sm">
                     <h3 class="font-bold text-gray-800 mb-2">Bạn nghĩ gì về bài viết này?</h3>
-                    <p class="text-gray-500 mb-4 text-sm">Đăng nhập để tham gia thảo luận cùng cộng đồng.</p>
+                    <p class="text-gray-500 mb-4 text-sm">Đăng nhập để tham gia thảo luận.</p>
                     <div class="flex justify-center gap-4">
                         <a href="{{ route('login') }}" class="bg-nexus-500 text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-nexus-600">Đăng nhập</a>
                         <a href="{{ route('register') }}" class="border border-nexus-500 text-nexus-500 px-6 py-2 rounded-full font-bold text-sm hover:bg-blue-50">Đăng ký</a>
@@ -133,8 +149,8 @@
             <!-- Danh sách comments -->
             <div class="space-y-6">
                 @forelse($post->comments as $comment)
-                    <!-- Gọi Partial View để hiển thị đệ quy -->
-                    @include('posts.partials.comment', ['comment' => $comment])
+                    <!-- CẬP NHẬT: Truyền thêm depth = 0 cho cấp đầu tiên -->
+                    @include('posts.partials.comment', ['comment' => $comment, 'depth' => 0])
                 @empty
                     <div class="text-center py-10 text-gray-400 italic">
                         Chưa có bình luận nào. Hãy là người đầu tiên!
@@ -145,26 +161,3 @@
     </div>
 </div>
 @endsection
-
-@push('scripts')
-    <!-- Script Validation cho Bình luận chính -->
-    <script>
-        function submitMainComment() {
-            const content = document.getElementById('main-comment-content').value;
-            
-            // Kiểm tra rỗng
-            if (!content.trim()) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Chưa nhập nội dung',
-                    text: 'Vui lòng nhập nội dung bình luận!',
-                    confirmButtonColor: '#0ea5e9'
-                });
-                return;
-            }
-            
-            // Nếu có nội dung thì submit form
-            document.getElementById('main-comment-form').submit();
-        }
-    </script>
-@endpush

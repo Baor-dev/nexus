@@ -28,7 +28,7 @@
                             <div class="text-xs text-gray-500 mb-2">
                                 Đăng bởi {{ $post->user->name }} • {{ $post->created_at->diffForHumans() }}
                             </div>
-                            <p class="text-gray-600 text-sm">{{ $post->description }}</p>
+                            <p class="text-gray-600 text-sm">{{ html_entity_decode($post->description) }}</p>
                         </div>
                 </div>
         @empty

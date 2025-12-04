@@ -1,68 +1,82 @@
 @extends('layouts.nexus')
 
 @section('content')
-<div class="max-w-4xl mx-auto">
+<div class="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8">
     <div class="bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden">
-        <div class="p-6 bg-gray-50 border-b border-gray-200">
-            <h1 class="text-xl font-bold text-gray-900">Tạo bài viết mới</h1>
-            <p class="text-sm text-gray-500 mt-1">Chia sẻ kiến thức, câu hỏi hoặc ý tưởng của bạn với cộng đồng.</p>
+        <div class="p-4 sm:p-6 bg-gray-50 border-b border-gray-200">
+            <h1 class="text-lg sm:text-xl font-bold text-gray-900">Tạo bài viết mới</h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">Chia sẻ kiến thức, câu hỏi hoặc ý tưởng của bạn với cộng đồng.</p>
         </div>
 
-        <form action="{{ route('posts.store') }}" method="POST" enctype="multipart/form-data" class="p-6 space-y-6">
+        <!-- Form với ID để xử lý AJAX -->
+        <form id="create-post-form" action="{{ route('posts.store') }}" method="POST" enctype="multipart/form-data" class="p-4 sm:p-6 space-y-4 sm:space-y-6">
             @csrf
-            
-            <!-- 1. Tiêu đề -->
+           
+            <!-- 1. Chọn Cộng đồng -->
             <div>
-                <label class="block font-bold text-gray-700 mb-2">Tiêu đề <span class="text-red-500">*</span></label>
-                <input type="text" name="title" class="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-nexus-500 focus:border-nexus-500" placeholder="Tiêu đề bài viết..." required>
-            </div>
-
-            <!-- 2. Chọn Cộng đồng -->
-            <div>
-                <label class="block font-bold text-gray-700 mb-2">Chọn cộng đồng <span class="text-red-500">*</span></label>
-                <select name="community_id" class="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-nexus-500 focus:border-nexus-500">
+                <label class="block font-bold text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">Chọn cộng đồng <span class="text-red-500">*</span></label>
+                <select name="community_id" class="w-full border border-gray-300 rounded-md px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base focus:ring-nexus-500 focus:border-nexus-500">
                     @foreach($communities as $community)
-                        <option value="{{ $community->id }}" {{ (isset($selectedCommunity) && $selectedCommunity == $community->id) ? 'selected' : '' }}>
+                        <option value="{{ $community->id }}" {{ (old('community_id', $selectedCommunity ?? '') == $community->id) ? 'selected' : '' }}>
                             c/{{ $community->name }}
                         </option>
                     @endforeach
                 </select>
+                @error('community_id')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
             </div>
 
-            <!-- 3. Ảnh bìa (Thumbnail) -->
+            <!-- 2. Tiêu đề -->
             <div>
-                <label class="block font-bold text-gray-700 mb-2">Ảnh bìa</label>
-                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:bg-gray-50 transition relative group cursor-pointer">
-                    <input type="file" name="thumbnail" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="previewThumbnail(event)">
+                <label class="block font-bold text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">Tiêu đề <span class="text-red-500">*</span></label>
+                <input type="text" name="title" value="{{ old('title') }}" 
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base focus:ring-nexus-500 focus:border-nexus-500 @error('title') border-red-500 @enderror" 
+                       placeholder="Tiêu đề bài viết..." required>
+                @error('title')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <!-- 3. Mô tả ngắn -->
+            <div>
+                <label class="block font-bold text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">Mô tả ngắn</label>
+                <textarea name="description" rows="3" class="w-full border border-gray-300 rounded-md px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base focus:ring-nexus-500 focus:border-nexus-500" placeholder="Tóm tắt nội dung bài viết">{{ old('description') }}</textarea>
+            </div>
+
+            <!-- 4. Ảnh/gif bìa -->
+            <div>
+                <label class="block font-bold text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">Ảnh bìa / GIF</label>
+                <div class="mt-1 flex justify-center px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6 border-2 border-gray-300 border-dashed rounded-md hover:bg-gray-50 transition relative group cursor-pointer">
+                    <input type="file" id="thumbnail_input" name="thumbnail" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="previewThumbnail(event)" accept="image/*">
+                    
                     <div class="space-y-1 text-center" id="thumbnail-placeholder">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                        <div class="flex text-sm text-gray-600 justify-center">
-                            <span class="font-medium text-nexus-600 hover:text-nexus-500">Tải ảnh lên</span>
-                            <p class="pl-1">hoặc kéo thả vào đây</p>
-                        </div>
-                        <p class="text-xs text-gray-500">PNG, JPG, GIF tối đa 2MB</p>
+                        <svg class="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                        <div class="flex text-xs sm:text-sm text-gray-600 justify-center"><span class="font-medium text-nexus-600 hover:text-nexus-500">Tải ảnh lên</span><p class="pl-1">hoặc kéo thả</p></div>
+                        <p class="text-[10px] sm:text-xs text-gray-500">JPG, PNG, GIF (Max 10MB)</p>
                     </div>
-                    <!-- Preview Container -->
-                    <img id="thumbnail-preview" class="hidden max-h-48 rounded mx-auto" />
+
+                    <img id="thumbnail-preview" class="hidden max-h-64 rounded shadow-sm object-contain">
                 </div>
             </div>
 
-            <!-- 4. Nội dung (TinyMCE Editor) -->
+            <!-- 5. Nội dung (TinyMCE Editor) -->
             <div>
-                <label class="block font-bold text-gray-700 mb-2">Nội dung bài viết</label>
-                <textarea id="my-editor" name="content" class="h-96"></textarea>
+                <label class="block font-bold text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">Nội dung bài viết <span class="text-red-500">*</span></label>
+                <textarea id="my-editor" name="content" class="h-64 sm:h-96">{{ old('content') }}</textarea>
+                @error('content')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
             </div>
 
             <!-- ACTION BAR -->
-            <div class="flex items-center justify-end pt-6 border-t border-gray-100 gap-3">
-                <a href="{{ route('home') }}" class="px-6 py-2.5 rounded-full border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition duration-200">
+            <div class="flex flex-col-reverse sm:flex-row items-center justify-end pt-4 sm:pt-6 border-t border-gray-100 gap-2 sm:gap-3">
+                <a href="{{ route('home') }}" class="w-full sm:w-auto text-center px-6 py-2.5 rounded-full border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition duration-200 text-sm sm:text-base">
                     Hủy bỏ
                 </a>
                 
-                <!-- Nút Đăng bài (Đã đổi về màu Nexus) -->
-                <button type="submit" class="group relative inline-flex items-center justify-center px-8 py-2.5 text-white transition-all duration-200 bg-gradient-to-r from-nexus-500 to-nexus-600 hover:from-nexus-600 hover:to-nexus-700 font-bold rounded-full shadow-md hover:shadow-lg hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-nexus-500">
+                <!-- Nút Submit gọi hàm JS xử lý -->
+                <button type="button" onclick="submitPost()" class="w-full sm:w-auto group relative inline-flex items-center justify-center px-8 py-2.5 text-white transition-all duration-200 bg-gradient-to-r from-nexus-500 to-nexus-600 hover:from-nexus-600 hover:to-nexus-700 font-bold rounded-full shadow-md hover:shadow-lg hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-nexus-500 text-sm sm:text-base">
                     <span class="mr-2">Đăng bài</span>
                     <svg class="w-5 h-5 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
                 </button>
@@ -85,20 +99,92 @@
             };
             if(event.target.files[0]) reader.readAsDataURL(event.target.files[0]);
         }
+
+        // Hàm Xử lý Đăng bài (AJAX)
+        function submitPost() {
+            // 1. Đồng bộ nội dung từ TinyMCE vào textarea
+            tinymce.triggerSave();
+
+            // 2. Lấy form và dữ liệu
+            const form = document.getElementById('create-post-form');
+            const formData = new FormData(form);
+            
+            // 3. Validate Sơ bộ Client-side
+            const title = formData.get('title');
+            const content = formData.get('content');
+
+            if (!title.trim()) {
+                Swal.fire({ icon: 'warning', title: 'Thiếu thông tin', text: 'Vui lòng nhập tiêu đề bài viết!', confirmButtonColor: '#0ea5e9' });
+                return;
+            }
+            
+            if (!content.trim()) {
+                Swal.fire({ icon: 'warning', title: 'Thiếu thông tin', text: 'Vui lòng nhập nội dung bài viết!', confirmButtonColor: '#0ea5e9' });
+                return;
+            }
+
+            // 4. Hiển thị Loading
+            Swal.fire({
+                title: 'Đang đăng bài...',
+                text: 'Vui lòng chờ trong giây lát',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            // 5. Gửi AJAX Request
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest', // Đánh dấu là AJAX
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    // Thành công -> Hiện thông báo -> Chuyển hướng
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Thành công!',
+                        text: body.message,
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        window.location.href = body.redirect_url;
+                    });
+                } else if (status === 422) {
+                    // Lỗi Validation từ Server
+                    let errorHtml = '<ul class="text-left text-sm text-red-600 list-disc pl-5">';
+                    for (const key in body.errors) {
+                        errorHtml += `<li>${body.errors[key][0]}</li>`;
+                    }
+                    errorHtml += '</ul>';
+                    Swal.fire({ icon: 'error', title: 'Lỗi nhập liệu', html: errorHtml, confirmButtonColor: '#d33' });
+                } else {
+                    // Lỗi khác
+                    throw new Error(body.message || 'Có lỗi xảy ra');
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                Swal.fire({ icon: 'error', title: 'Lỗi', text: 'Không thể kết nối đến máy chủ. Vui lòng thử lại.', confirmButtonColor: '#d33' });
+            });
+        }
     </script>
 
-    <!-- Script TinyMCE (Sử dụng API KEY từ env) -->
-    <script src="https://cdn.tiny.cloud/1/{{ env('TINYMCE_API_KEY') }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    <!-- Script TinyMCE -->
+    <script src="https://cdn.tiny.cloud/1/{{ config('services.tinymce.key') }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
     <script>
         tinymce.init({
-            selector: '#my-editor', // ID phải khớp với textarea
-            height: 500,
+            selector: '#my-editor',
+            height: window.innerWidth < 640 ? 300 : 500,
             menubar: false,
             plugins: 'image link lists table code preview',
             toolbar: 'undo redo | styleselect | bold italic | alignleft aligncenter alignright | bullist numlist | image link | code',
             content_style: 'body { font-family:Inter,sans-serif; font-size:14px }',
             
-            // Cấu hình Upload ảnh (Drag & Drop)
             images_upload_url: "{{ route('upload.image') }}",
             automatic_uploads: true,
             
@@ -107,31 +193,16 @@
                 xhr.withCredentials = false;
                 xhr.open('POST', "{{ route('upload.image') }}");
                 
-                // Lấy CSRF Token
                 const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
                 xhr.setRequestHeader('X-CSRF-TOKEN', token);
 
-                xhr.upload.onprogress = (e) => {
-                    progress(e.loaded / e.total * 100);
-                };
-
+                xhr.upload.onprogress = (e) => { progress(e.loaded / e.total * 100); };
                 xhr.onload = () => {
-                    if (xhr.status === 403) {
-                        reject({ message: 'HTTP Error: ' + xhr.status, remove: true });
-                        return;
-                    }
-                    if (xhr.status < 200 || xhr.status >= 300) {
-                        reject('HTTP Error: ' + xhr.status);
-                        return;
-                    }
+                    if (xhr.status === 403) { reject({ message: 'HTTP Error: ' + xhr.status, remove: true }); return; }
+                    if (xhr.status < 200 || xhr.status >= 300) { reject('HTTP Error: ' + xhr.status); return; }
                     const json = JSON.parse(xhr.responseText);
-                    if (!json || typeof json.location != 'string') {
-                        reject('Invalid JSON: ' + xhr.responseText);
-                        return;
-                    }
                     resolve(json.location);
                 };
-
                 const formData = new FormData();
                 formData.append('file', blobInfo.blob(), blobInfo.filename());
                 xhr.send(formData);

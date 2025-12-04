@@ -14,7 +14,7 @@ class UserController extends Controller
         // Lấy bài viết của user này (kèm phân trang)
         $posts = $user->posts()
                       ->with(['community', 'votes'])
-                      ->withCount('comments')
+                      ->withCount('allComments')
                       ->latest()
                       ->paginate(10);
 

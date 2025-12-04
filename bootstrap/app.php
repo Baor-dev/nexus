@@ -3,7 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Http\Middleware\AdminMiddleware; // 1. Import Middleware của bạn
+use App\Http\Middleware\AdminMiddleware;
+use App\Http\Middleware\CheckBanned; // 1. Import Middleware CheckBanned
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,9 +13,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // 2. Đăng ký alias 'admin' tại đây
+        // 2. Đăng ký alias cho Admin (bạn đã làm cái này rồi)
         $middleware->alias([
             'admin' => AdminMiddleware::class,
+        ]);
+
+        // 3. QUAN TRỌNG: Thêm CheckBanned vào nhóm 'web'
+        // Để nó chạy ở MỌI trang web, kiểm tra xem user có bị ban không
+        $middleware->web(append: [
+            CheckBanned::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

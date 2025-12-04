@@ -6,15 +6,14 @@ use App\Models\Report;
 use App\Models\Post;
 use App\Models\User;
 use App\Models\Comment;
-use App\Models\Community; // Nhớ import Community
+use App\Models\Community;
 use Illuminate\Http\Request;
 
 class AdminController extends Controller
 {
-    // Danh sách các báo cáo đang chờ (Pending) & Thống kê
+    // Danh sách Report & Thống kê
     public function index()
     {
-        // 1. THỐNG KÊ TỔNG QUAN (MỚI THÊM)
         $stats = [
             'total_users' => User::count(),
             'total_posts' => Post::count(),
@@ -24,55 +23,154 @@ class AdminController extends Controller
             'banned_users' => User::where('is_banned', true)->count(),
         ];
 
-        // 2. Lấy danh sách Report Bài viết/Comment
         $postReports = Report::with(['user', 'reportable'])
                          ->where('status', 'pending')
                          ->whereIn('reportable_type', ['App\Models\Post', 'App\Models\Comment'])
                          ->latest()
                          ->paginate(10, ['*'], 'posts_page');
 
-        // 3. Lấy danh sách Report User
         $userReports = Report::with(['user', 'reportable'])
                          ->where('status', 'pending')
                          ->where('reportable_type', 'App\Models\User')
                          ->latest()
                          ->paginate(10, ['*'], 'users_page');
-                         
+                          
         return view('admin.reports', compact('postReports', 'userReports', 'stats'));
     }
 
-    // Xử lý báo cáo (Giữ nguyên logic cũ)
+    // Xử lý Report (ĐÃ CẬP NHẬT LOGIC BAN MẠNH MẼ HƠN)
     public function handle(Request $request, Report $report)
     {
         $action = $request->action; 
 
+        // 1. XÓA NỘI DUNG
         if ($action === 'delete_content') {
             if ($report->reportable) {
                 $report->reportable->delete();
+                $report->update(['status' => 'resolved']);
+                return back()->with('success', 'Đã xóa nội dung vi phạm.');
             }
-            $report->update(['status' => 'resolved']);
-            return back()->with('success', 'Đã xóa nội dung vi phạm.');
+            return back()->with('error', 'Nội dung này không còn tồn tại (có thể đã bị xóa trước đó).');
         }
 
+        // 2. BAN USER
         if ($action === 'ban_user') {
-            if ($report->reportable && $report->reportable->user) {
-                // Case 1: Report bài viết/comment -> Ban tác giả
-                $userToBan = $report->reportable->user;
-                $userToBan->update(['is_banned' => true]);
-                $report->reportable->delete(); // Xóa luôn nội dung
-            } elseif ($report->reportable_type === 'App\Models\User') {
-                // Case 2: Report trực tiếp user -> Ban user đó
+            $userToBan = null;
+
+            // Trường hợp A: Report trực tiếp User
+            if ($report->reportable_type === 'App\Models\User') {
                 $userToBan = User::find($report->reportable_id);
-                if($userToBan) $userToBan->update(['is_banned' => true]);
             }
-            
-            $report->update(['status' => 'resolved']);
-            return back()->with('success', 'Đã BAN người dùng vi phạm.');
+            // Trường hợp B: Report Bài viết/Comment -> Tìm tác giả
+            elseif ($report->reportable) {
+                $userToBan = $report->reportable->user;
+                // Xóa luôn nội dung vi phạm sau khi tìm được tác giả
+                $report->reportable->delete(); 
+            }
+
+            // Thực hiện BAN
+            if ($userToBan) {
+                // Chặn ban Admin
+                if ($userToBan->role === 'admin') {
+                    return back()->with('error', 'Không thể ban tài khoản Admin!');
+                }
+
+                // Cập nhật trực tiếp vào Database
+                $userToBan->is_banned = true;
+                $userToBan->save();
+
+                $report->update(['status' => 'resolved']);
+                
+                // --- Đã sửa dòng thông báo ở đây ---
+                return back()->with('success', $userToBan->name . ' đã bị ban vĩnh viễn.');
+            } else {
+                return back()->with('error', 'Không tìm thấy User để ban (Có thể nội dung gốc đã bị xóa làm mất liên kết).');
+            }
         }
 
+        // 3. BỎ QUA
         if ($action === 'dismiss') {
             $report->update(['status' => 'dismissed']);
             return back()->with('success', 'Đã bỏ qua báo cáo.');
         }
+    }
+
+    // Hàm xử lý Ban trực tiếp từ nút bấm
+    // public function banUser(User $user)
+    // {
+    //     if ($user->role === 'admin') {
+    //         return back()->with('error', 'Không thể ban Admin!');
+    //     }
+
+    //     $user->is_banned = true;
+    //     $user->save();
+
+    //     // --- Đã sửa dòng thông báo ở đây ---
+    //     return back()->with('success', $user->name . ' đã bị ban vĩnh viễn.');
+    // }
+
+    // CÁC HÀM QUẢN LÝ MỚI
+    public function users()
+    {
+        $data = User::latest()->paginate(15);
+        $type = 'users';
+        $title = 'Quản lý Thành viên';
+        return view('admin.manage', compact('data', 'type', 'title'));
+    }
+
+    public function communities()
+    {
+        $data = Community::withCount('posts', 'members')->latest()->paginate(15);
+        $type = 'communities';
+        $title = 'Quản lý Cộng đồng';
+        return view('admin.manage', compact('data', 'type', 'title'));
+    }
+
+    public function posts()
+    {
+        $data = Post::with('user', 'community')->withCount('comments', 'votes')->latest()->paginate(15);
+        $type = 'posts';
+        $title = 'Quản lý Bài viết';
+        return view('admin.manage', compact('data', 'type', 'title'));
+    }
+
+    public function banned()
+    {
+        $data = User::where('is_banned', true)->latest()->paginate(15);
+        $type = 'banned';
+        $title = 'Danh sách Bị khóa';
+        return view('admin.manage', compact('data', 'type', 'title'));
+    }
+
+    // Hàm xóa chung cho mọi loại
+    public function deleteResource($type, $id)
+    {
+        switch ($type) {
+            case 'users':
+            case 'banned':
+                $user = User::findOrFail($id);
+                if ($user->role === 'admin') return back()->with('error', 'Không thể xóa Admin!');
+                $user->delete();
+                break;
+            case 'communities':
+                Community::findOrFail($id)->delete();
+                break;
+            case 'posts':
+                Post::findOrFail($id)->delete();
+                break;
+        }
+        return back()->with('success', 'Đã xóa thành công!');
+    }
+
+    // Hàm Ban/Unban nhanh
+    public function toggleBan(User $user)
+    {
+        if ($user->role === 'admin') return back()->with('error', 'Không thể tác động lên Admin!');
+        
+        $user->is_banned = !$user->is_banned;
+        $user->save();
+
+        $status = $user->is_banned ? 'đã bị khóa' : 'đã được mở khóa';
+        return back()->with('success', "Tài khoản {$user->name} $status.");
     }
 }

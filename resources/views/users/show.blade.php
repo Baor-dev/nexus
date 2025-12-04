@@ -3,30 +3,32 @@
 @section('content')
 <div class="flex flex-col md:flex-row gap-6">
     
-    <!-- CỘT TRÁI: DANH SÁCH BÀI VIẾT (66%) -->
+    <!-- LEFT COLUMN: POSTS LIST (2/3 width) -->
     <div class="w-full md:w-2/3 space-y-4">
         <h3 class="font-bold text-lg text-gray-700 mb-2">Bài viết của {{ $user->name }}</h3>
 
         @forelse($posts as $post)
             @php
-                // Logic vote cho bài viết
                 $userVote = Auth::check() ? $post->votes->where('user_id', Auth::id())->first() : null;
                 $voteValue = $userVote ? $userVote->value : 0;
-                $totalScore = $post->votes_sum_value ?? $post->votes->sum('value');
+                // Sử dụng votes_sum_value nếu có, nếu không thì tính tổng thủ công
+                $totalScore = $post->votes_sum_value ?? $post->votes->sum('value'); 
+                $isBookmarked = Auth::check() ? Auth::user()->bookmarks->contains($post->id) : false;
             @endphp
 
-            <!-- Post Card (Đã cập nhật hiển thị ảnh) -->
+            <!-- Post Card -->
             <div class="bg-white border border-gray-300 rounded-lg hover:border-gray-400 transition cursor-pointer flex flex-col" 
-                 onclick="window.location='{{ route('posts.show', $post->slug) }}'">
+                onclick="window.location='{{ route('posts.show', $post->slug) }}'">
                 
-                <!-- Header Card -->
+                <!-- Post Header -->
                 <div class="p-3 flex items-center justify-between border-b border-gray-100">
                     <div class="flex items-center gap-2">
+                        {{-- Avatar and Meta --}}
                         <div class="w-8 h-8 rounded-full overflow-hidden border border-gray-200">
                             @if($post->user->avatar)
-                                <img src="{{ asset('storage/' . $post->user->avatar) }}" class="w-full h-full object-cover">
+                                <img src="{{ asset('storage/' . $post->user->avatar) }}" class="w-full h-full object-cover" alt="{{ $post->user->name }}">
                             @else
-                                <img src="https://ui-avatars.com/api/?name={{ $post->user->name }}&background=random" class="w-full h-full object-cover">
+                                <img src="https://ui-avatars.com/api/?name={{ $post->user->name }}&background=random" class="w-full h-full object-cover" alt="{{ $post->user->name }}">
                             @endif
                         </div>
                         <div class="text-xs">
@@ -38,25 +40,22 @@
                             </div>
                         </div>
                     </div>
-                    <span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded-full">
-                        {{ $totalScore }} điểm
-                    </span>
                 </div>
 
-                <!-- Tiêu đề -->
+                <!-- Title -->
                 <div class="px-3 pt-2 pb-1">
                     <h3 class="text-lg font-bold text-gray-900 leading-snug">{{ $post->title }}</h3>
                 </div>
 
-                <!-- 1. HIỂN THỊ ẢNH (THUMBNAIL) -->
+                <!-- Media Display (Thumbnail/Image) -->
                 @if($post->thumbnail)
                     <div class="w-full aspect-square bg-gray-100 overflow-hidden flex justify-center items-center relative mt-2">
                         <div class="absolute inset-0 bg-cover bg-center blur-sm opacity-50" style="background-image: url('{{ asset('storage/' . $post->thumbnail) }}')"></div>
-                        <img src="{{ asset('storage/' . $post->thumbnail) }}" class="relative w-full h-full object-contain z-10" loading="lazy">
+                        <img src="{{ asset('storage/' . $post->thumbnail) }}" class="relative w-full h-full object-contain z-10" loading="lazy" alt="{{ $post->title }}">
                     </div>
                 @else
                     <div class="px-3 py-4">
-                        <p class="text-sm text-gray-800 line-clamp-6">{{ $post->description }}</p>
+                        <p class="text-sm text-gray-800 line-clamp-6">{{ html_entity_decode($post->description) }}</p>
                     </div>
                 @endif
 
@@ -69,7 +68,7 @@
                                 class="p-1 rounded hover:bg-gray-200 transition {{ $voteValue == 1 ? 'text-orange-500' : 'text-gray-400' }}">
                             <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4L4 12h5v8h6v-8h5z"/></svg>
                         </button>
-                        <span id="post-score-{{ $post->id }}" class="text-sm font-bold text-gray-700 min-w-[20px] text-center">
+                        <span id="post-score-{{ $post->id }}" class="text-sm font-bold text-gray-700 min-w-[20px] text-center {{ $voteValue != 0 ? ($voteValue == 1 ? 'text-orange-500' : 'text-blue-500') : '' }}">
                             {{ $totalScore }}
                         </span>
                         <button onclick="vote('post', {{ $post->id }}, -1)" 
@@ -82,30 +81,27 @@
                     <!-- Comments -->
                     <div class="flex items-center gap-1 text-gray-500 hover:bg-gray-100 px-2 py-1 rounded transition">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-                        <span class="text-xs font-bold">{{ $post->comments_count }} bình luận</span>
+                        <span class="text-xs font-bold">{{ $post->all_comments_count }} bình luận</span>
                     </div>
 
-                    <!-- Bookmark Button -->
-                    @php
-                        $isBookmarked = Auth::check() ? Auth::user()->bookmarks->contains($post->id) : false;
-                    @endphp
-                    <button onclick="event.stopPropagation(); bookmark({{ $post->id }}, this)" 
-                            class="flex items-center gap-1 hover:bg-gray-100 px-2 py-1 rounded transition {{ $isBookmarked ? 'text-yellow-500' : 'text-gray-500' }}" 
-                            title="Lưu bài viết">
-                        <!-- Icon Bookmark -->
-                        <svg class="w-5 h-5" fill="{{ $isBookmarked ? 'currentColor' : 'none' }}" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
-                        </svg>
-                        <span class="text-xs font-bold hidden sm:inline">Lưu</span>
-                    </button>
-
-                    <div class="flex items-center gap-1 hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-1 rounded transition text-gray-500 dark:text-gray-400" title="Lượt xem">
+                    <!-- Views -->
+                    <div class="flex items-center gap-1 hover:bg-gray-100 px-2 py-1 rounded transition text-gray-500" title="Lượt xem">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
                         <span class="text-xs font-bold">{{ number_format($post->views) }}</span>
                     </div>
+
+                    <!-- Bookmark Button (ml-auto is removed as it's not needed here) -->
+                    <button onclick="event.stopPropagation(); bookmark({{ $post->id }}, this)" 
+                            class="ml-auto flex items-center gap-1 hover:bg-gray-100 px-2 py-1 rounded transition {{ $isBookmarked ? 'text-yellow-500' : 'text-gray-500' }}" 
+                            title="Lưu bài viết">
+                        <svg class="w-5 h-5" fill="{{ $isBookmarked ? 'currentColor' : 'none' }}" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                        </svg>
+                        <span class="text-xs font-bold hidden sm:inline">Lưu</span>
+                    </button>
                 </div>
             </div>
         @empty
@@ -114,27 +110,28 @@
             </div>
         @endforelse
 
+        <!-- Pagination -->
         <div class="mt-4">
             {{ $posts->links() }}
         </div>
     </div>
 
-    <!-- CỘT PHẢI: THÔNG TIN USER -->
+    <!-- RIGHT COLUMN: USER INFO SIDEBAR (1/3 width) -->
     <div class="hidden md:block w-1/3 space-y-4">
         <div class="bg-white border border-gray-300 rounded-md overflow-hidden shadow-sm sticky top-20">
             <div class="h-24 bg-nexus-500"></div>
             <div class="px-4 pb-4">
                 <div class="relative flex justify-between items-end -mt-10 mb-4">
-                    <!-- Avatar Lớn -->
+                    <!-- Large Avatar -->
                     <div class="w-24 h-24 bg-white p-1 rounded-lg shadow-lg overflow-hidden">
                         @if($user->avatar)
-                            <img src="{{ asset('storage/' . $user->avatar) }}" class="w-full h-full object-cover rounded-md">
+                            <img src="{{ asset('storage/' . $user->avatar) }}" class="w-full h-full object-cover rounded-md" alt="Avatar {{ $user->name }}">
                         @else
-                            <img src="https://ui-avatars.com/api/?name={{ $user->name }}&background=random&size=128" class="w-full h-full object-cover rounded-md">
+                            <img src="https://ui-avatars.com/api/?name={{ $user->name }}&background=random&size=128" class="w-full h-full object-cover rounded-md" alt="Avatar {{ $user->name }}">
                         @endif
                     </div>
                     
-                    <!-- Nút Sửa Profile (Nếu là chính chủ) -->
+                    <!-- Edit Profile Button (If authenticated user is viewing their own profile) -->
                     @auth
                         @if(Auth::id() === $user->id)
                             <a href="/profile" class="bg-white border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded-full hover:bg-gray-50 transition shadow-sm">
@@ -147,7 +144,7 @@
                 <h2 class="font-bold text-2xl text-gray-900 leading-tight">{{ $user->name }}</h2>
                 <p class="text-sm text-gray-500 mb-4">u/{{ $user->name }}</p>
 
-                <!-- 2. NÚT BÁO CÁO USER (Cho người khác xem) -->
+                <!-- Report User Button (If viewing another user's profile) -->
                 @auth
                     @if(Auth::id() !== $user->id)
                         <button onclick="showReportForm('user', {{ $user->id }})" 

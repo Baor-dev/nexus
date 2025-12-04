@@ -11,44 +11,57 @@ use Illuminate\Support\Facades\Session;
 
 class PostController extends Controller
 {
-    // Form tạo bài viết
-    public function create()
+    // 1. Form tạo bài viết
+    public function create(Request $request)
     {
         $communities = Community::all();
-        return view('posts.create', compact('communities'));
+        $selectedCommunity = $request->query('community_id'); 
+        return view('posts.create', compact('communities', 'selectedCommunity'));
     }
 
-    // Xử lý lưu bài viết
+    // 2. Xử lý lưu bài viết mới (CẬP NHẬT)
     public function store(Request $request)
     {
         $request->validate([
             'title' => 'required|max:255',
             'community_id' => 'required|exists:communities,id',
-            'thumbnail' => 'required|image|max:2048', // Bắt buộc có ảnh bìa, max 2MB
-            'content' => 'required'
+            'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240', 
+            'content' => 'required',
+            'description' => 'nullable|string|max:500',
         ]);
 
-        // Xử lý upload ảnh bìa (Thumbnail)
         $thumbnailPath = null;
         if ($request->hasFile('thumbnail')) {
-            // Lưu vào storage/app/public/thumbnails
             $thumbnailPath = $request->file('thumbnail')->store('thumbnails', 'public');
         }
 
+        // Sử dụng mô tả người dùng nhập, nếu không có thì tự động cắt từ content
+        $description = $request->description 
+            ? $request->description 
+            : substr(strip_tags($request->content), 0, 150) . '...';
+
         Post::create([
             'title' => $request->title,
-            'slug' => Str::slug($request->title) . '-' . time(), // Thêm time để tránh trùng slug
+            'slug' => Str::slug($request->title) . '-' . time(),
             'user_id' => auth()->id(),
             'community_id' => $request->community_id,
             'content' => $request->content,
             'thumbnail' => $thumbnailPath,
-            'description' => substr(strip_tags($request->content), 0, 150) . '...' // Tự tạo mô tả ngắn từ nội dung
+            'description' => $description,
+            'views' => 0
         ]);
 
-        return redirect()->route('dashboard')->with('success', 'Đăng bài thành công!');
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Đăng bài thành công!',
+                'redirect_url' => route('home')
+            ]);
+        }
+
+        return redirect()->route('home')->with('success', 'Đăng bài thành công!');
     }
     
-    // API Upload ảnh cho TinyMCE (kéo thả ảnh vào bài viết)
+    // 3. API Upload ảnh cho TinyMCE
     public function uploadImage(Request $request)
     {
         if ($request->hasFile('file')) {
@@ -58,14 +71,13 @@ class PostController extends Controller
         return response()->json(['error' => 'Upload failed'], 500);
     }
     
-    // Xem chi tiết bài viết
+    // 4. Xem chi tiết bài viết
     public function show($slug)
     {
-        // TỐI ƯU: Load comment cha -> comment con -> user của comment con
         $post = Post::where('slug', $slug)
             ->with(['user', 'community', 'comments' => function($q) {
-                $q->whereNull('parent_id') // Chỉ lấy comment gốc
-                  ->with(['user', 'replies.user', 'replies.replies']); // Load sâu thêm 2 cấp nữa nếu muốn
+                $q->whereNull('parent_id')
+                  ->with(['user', 'replies.user', 'replies.replies']);
             }])
             ->firstOrFail();
 
@@ -78,57 +90,61 @@ class PostController extends Controller
         return view('posts.show', compact('post'));
     }
 
+    // 5. Hiển thị form chỉnh sửa
     public function edit(Post $post)
     {
-        // CHẶN: Nếu không phải tác giả thì báo lỗi 403
         if (auth()->id() !== $post->user_id) {
             abort(403, 'Bạn không có quyền sửa bài viết này');
         }
-
         $communities = Community::all();
         return view('posts.edit', compact('post', 'communities'));
     }
 
-    // 2. Xử lý cập nhật dữ liệu
+    // 6. Xử lý cập nhật bài viết (CẬP NHẬT)
     public function update(Request $request, Post $post)
     {
-        if (auth()->id() !== $post->user_id) {
-            abort(403);
-        }
+        if (auth()->id() !== $post->user_id) abort(403);
 
         $request->validate([
             'title' => 'required|max:255',
             'community_id' => 'required|exists:communities,id',
             'content' => 'required',
-            'thumbnail' => 'nullable|image|max:2048' // Ảnh là tùy chọn khi sửa
+            'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240', // Max 10MB
+            'description' => 'nullable|string|max:500',
         ]);
 
-        // Logic cập nhật ảnh (chỉ upload nếu user chọn ảnh mới)
         if ($request->hasFile('thumbnail')) {
             $thumbnailPath = $request->file('thumbnail')->store('thumbnails', 'public');
             $post->thumbnail = $thumbnailPath;
         }
 
+        // Logic cập nhật mô tả tương tự
+        $description = $request->description 
+            ? $request->description 
+            : substr(strip_tags($request->content), 0, 150) . '...';
+
         $post->update([
             'title' => $request->title,
             'community_id' => $request->community_id,
             'content' => $request->content,
-            // Không đổi slug để giữ SEO, hoặc đổi thì phải xử lý redirect
-            'description' => substr(strip_tags($request->content), 0, 150) . '...'
+            'description' => $description
         ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Đã cập nhật bài viết!',
+                'redirect_url' => route('posts.show', $post->slug)
+            ]);
+        }
 
         return redirect()->route('posts.show', $post->slug)->with('success', 'Đã cập nhật bài viết!');
     }
 
-    // 3. Xử lý xóa bài viết
+    // 7. Xử lý xóa bài viết
     public function destroy(Post $post)
     {
-        if (auth()->id() !== $post->user_id) {
-            abort(403, 'Bạn không được phép xóa bài này');
-        }
-
+        if (auth()->id() !== $post->user_id) abort(403);
         $post->delete();
-
         return redirect()->route('home')->with('success', 'Đã xóa bài viết.');
     }
 }

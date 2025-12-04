@@ -9,27 +9,45 @@ use Illuminate\Notifications\Notification;
 use App\Models\User;
 use App\Models\Post;
 
-class NewComment extends Notification
+class NewComment extends Notification implements ShouldQueue // Thêm ShouldQueue để gửi mail không bị lag web
 {
     use Queueable;
 
     protected $commenter;
     protected $post;
 
-    // Nhận vào người bình luận và bài viết
     public function __construct(User $commenter, Post $post)
     {
         $this->commenter = $commenter;
         $this->post = $post;
     }
 
-    // Chỉ lưu vào Database (không gửi mail để đỡ spam lúc test)
+    // LOGIC QUYẾT ĐỊNH KÊNH GỬI
     public function via(object $notifiable): array
     {
-        return ['database'];
+        // Mặc định luôn có thông báo trên web (quả chuông)
+        $channels = ['database'];
+
+        // Chỉ gửi email nếu user đó đã xác thực email
+        if ($notifiable->hasVerifiedEmail()) {
+            $channels[] = 'mail';
+        }
+
+        return $channels;
     }
 
-    // Cấu trúc dữ liệu sẽ lưu vào DB
+    // CẤU HÌNH NỘI DUNG EMAIL
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('💬 Bình luận mới từ ' . $this->commenter->name)
+            ->greeting('Xin chào ' . $notifiable->name . '!')
+            ->line($this->commenter->name . ' vừa bình luận vào bài viết của bạn: "' . $this->post->title . '"')
+            ->action('Xem bình luận', route('posts.show', $this->post->slug))
+            ->line('Cảm ơn bạn đã sử dụng Nexus!');
+    }
+
+    // CẤU HÌNH NỘI DUNG TRÊN WEB (DATABASE)
     public function toArray(object $notifiable): array
     {
         return [
